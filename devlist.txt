@@ -1,5 +1,13 @@
 # IDCODE IR_len ID_Cmd Text
 
+# Altera / Intel devices (for JTAG debugging, not programming)
+020f10dd      10    0x09 EP4CE6
+020f30dd      10    0x09 EP3C25/10CL025
+
+
+
+# Xilinx devices
+
 03631093      6    0x09 XA7A100T
 0362e093      6    0x09 XC7A15T
 0362D093      6    0x09 XC7A35T

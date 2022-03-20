@@ -4,7 +4,7 @@ set(xc3sprog_VERSION_MAJOR 0)
 set(xc3sprog_VERSION_MINOR 0)
 
 SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
-set(CMAKE_CXX_FLAGS "-g -Wall")
+set(CMAKE_CXX_FLAGS "-fPIC -g -Wall")
 cmake_minimum_required(VERSION 2.6)
 
 if(${WIN32})
@@ -163,8 +163,8 @@ target_link_libraries(xc3sprog xc3sproglib ${LIBFTDI_LIBRARIES}  ${LIBFTD2XX_LIB
 add_executable(readdna readdna.cpp devices.h)
 target_link_libraries(readdna xc3sproglib ${LIBFTDI_LIBRARIES}  ${LIBFTD2XX_LIBRARIES} ${CONDITIONAL_LIBS}  ${LIBS} )
 
-
-
+add_library(tcljtag SHARED tcljtag.cpp javr.cpp srecfile.cpp progalgavr.cpp devices.h)
+target_link_libraries(tcljtag xc3sproglib ${LIBFTDI_LIBRARIES}  ${LIBFTD2XX_LIBRARIES} ${CONDITIONAL_LIBS}  ${LIBS} )
 
 install(TARGETS xc3sprog DESTINATION bin)
 install(TARGETS xc2c_warp DESTINATION bin)
