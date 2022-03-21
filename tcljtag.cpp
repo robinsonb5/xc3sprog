@@ -78,49 +78,22 @@ void ctrl_c(int sig)
 }
 
 
-int init_chain(Jtag &jtag, DeviceDB &db)
+unsigned long get_id(std::auto_ptr<Jtag> &jtag, DeviceDB &db, int chainpos)
 {
-  int num = jtag.getChain();
-  if (num == 0)
-    {
-      fprintf(stderr,"No JTAG Chain found\n");
-      return 0;
-    }
-  // Synchronise database with chain of devices.
-  for (int i=0; i<num; i++){
-    unsigned long id = jtag.getDeviceID(i);
-    int length = db.idToIRLength(id);
-    if (length > 0)
-      jtag.setDeviceIRLength(i,length);
-    else
-      {
-        fprintf(stderr,"Cannot find device having IDCODE=%07lx Revision %c\n",
-                id & 0x0fffffff,  (int)(id  >>28) + 'A');
-        return 0;
-      }
-  }
-  return num;
-}
-
-static int last_pos = -1;
-
-unsigned long get_id(Jtag &jtag, DeviceDB &db, int chainpos)
-{
-  bool verbose = jtag.getVerbose();
-  int num = jtag.getChain();
-  if (jtag.selectDevice(chainpos)<0)
+  bool verbose = jtag->getVerbose();
+  int num = jtag->getChain();
+  if (jtag->selectDevice(chainpos)<0)
     {
       fprintf(stderr, "Invalid chain position %d, must be >= 0 and < %d\n",
               chainpos, num);
       return 0;
     }
-  unsigned long id = jtag.getDeviceID(chainpos);
-  if (verbose && (last_pos != chainpos))
+  unsigned long id = jtag->getDeviceID(chainpos);
+  if (verbose)
     {
       fprintf(stderr, "JTAG chainpos: %d Device IDCODE = 0x%08lx\tDesc: %s\n",
               chainpos, id, db.idToDescription(id));
       fflush(stderr);
-      last_pos = chainpos;
     }
   return id;
 }
@@ -441,12 +414,15 @@ class TclJTAG
 		    throw -1;
 		}
 
-		if ( Tcl_PkgProvide(interp, "TestJTAGExtn", "1.0") != TCL_OK ) {
+		if ( Tcl_PkgProvide(interp, "TclJTAG", "1.0") != TCL_OK ) {
 		    throw -1;
 		}
-		Tcl_CreateObjCommand(interp, "jtag::opencable", opencable, this, NULL);
-		Tcl_CreateObjCommand(interp, "jtag::deviceid", deviceid, this, NULL);
-		Tcl_CreateObjCommand(interp, "jtag::devicedescription", devicedescription, this, NULL);
+		Tcl_CreateObjCommand(interp, "jtag::get_cables", getcables, this, NULL);
+		Tcl_CreateObjCommand(interp, "jtag::open_cable", opencable, this, NULL);
+		Tcl_CreateObjCommand(interp, "jtag::close_cable", closecable, this, NULL);
+		Tcl_CreateObjCommand(interp, "jtag::select_device", selectdevice, this, NULL);
+		Tcl_CreateObjCommand(interp, "jtag::get_device_id", deviceid, this, NULL);
+		Tcl_CreateObjCommand(interp, "jtag::get_device_description", devicedescription, this, NULL);
 		Tcl_CreateObjCommand(interp, "jtag::detect_chain", detectchain, this, NULL);
 		Tcl_CreateObjCommand(interp, "jtag::shift_ir", shift_ir, this, NULL);
 		Tcl_CreateObjCommand(interp, "jtag::shift_dr", shift_dr, this, NULL);
@@ -466,9 +442,46 @@ class TclJTAG
 				result=0;
 		}
 		if(!result)
-			printf("Cable not connected\n");
+			fprintf(stderr,"Cable not connected\n");
 		return(result);
 	}
+	
+	static int getcables(ClientData cdata,Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
+	{
+		TclJTAG *j=(TclJTAG *)cdata;
+		Tcl_Obj *list;
+		int idx=0;
+		const char *alias;
+		if(!j)
+			return TCL_ERROR;
+		list=Tcl_NewListObj(j->cabledb.getCableCount(),0);
+		while(alias=j->cabledb.getCableAlias(idx++))
+		{
+			Tcl_Obj *str=Tcl_NewStringObj(alias,strlen(alias));
+			Tcl_ListObjAppendElement(interp,list,str);
+			fprintf(stderr,"Cable: %s\n",alias);			
+		}
+		Tcl_SetObjResult(interp,list);
+		return(TCL_OK);
+	}
+
+	static int closecable(ClientData cdata,Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
+	{
+		int res;
+		TclJTAG *j=(TclJTAG *)cdata;
+		if(!j)
+			return TCL_ERROR;
+		if(!j->connected)
+		{
+			fprintf(stderr,"No cable connected\n");
+			return TCL_ERROR;
+		}
+		j->jtag.reset();
+		j->io.reset();
+		j->connected=false;
+		return TCL_OK;
+	}
+	 
 	static int opencable(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 	{
 		int res;
@@ -476,10 +489,8 @@ class TclJTAG
 		if(!j)
 			return TCL_ERROR;
 
-		if(j->jtag)
-			delete j->jtag;
-		if(j->io.get())
-			delete j->io.release();
+		j->jtag.reset();
+		j->io.reset();
 		j->connected=false;
 
 		switch(objc)
@@ -493,25 +504,25 @@ class TclJTAG
 				if(res)
 				{
 					// FIXME dump a list of cables here
-					printf("Failed to open cable %s\n");
+					fprintf(stderr,"Failed to open cable %s\n");
 					return(TCL_ERROR);
 				}
 //				printf("Getting IO...\n");  
 				res = getIO( &j->io, &j->cable, j->dev, j->serial, j->verbose, j->use_ftd2xx, j->jtag_freq);
 				if (res) /* some error happend*/
 				{
-					printf("Failed to open cable %s\n");
+					fprintf(stderr,"Failed to open cable %s\n");
 					return(TCL_ERROR);
 				}
 //				printf("Got IO, creating JTAG object...\n");  
 
-				j->jtag = new Jtag(j->io.get());
-//				printf("Setting verbose...\n");  
+				j->jtag.reset(new Jtag(j->io.get()));
 				j->jtag->setVerbose(j->verbose);
 
-				if (!init_chain(*j->jtag, j->devicedb))
+				detect_chain(j->jtag.get(), &j->devicedb);
+				if (!j->jtag->getChain())
 				{
-					printf("Couldn't initialise chain\n");
+					fprintf(stderr,"Couldn't initialise chain\n");
 					return(TCL_ERROR);
 				}
 				j->connected=true;
@@ -578,6 +589,11 @@ class TclJTAG
 				}
 			}
 		}
+		else
+		{
+			fprintf(stderr,"Usage: shift_dr value length\n");
+			return TCL_ERROR;
+		}
 		return(res);
 	}
 
@@ -586,9 +602,53 @@ class TclJTAG
 		TclJTAG *j=GetJTAG(cdata);
 		if(!j)
 			return TCL_ERROR;
-		detect_chain(j->jtag, &j->devicedb);
+		if(!j->connected)
+		{
+			fprintf(stderr,"No cable connected\n");
+			return TCL_ERROR;
+		}
+		detect_chain(j->jtag.get(), &j->devicedb);
+		if (j->jtag->getChain(1))
+		{
+			fprintf(stderr,"Couldn't initialise chain\n");
+			return(TCL_ERROR);
+		}
 		return(TCL_OK);
 	}
+
+	static int selectdevice(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
+	{
+		int chainpos=0;
+		int res=0;
+		int num;
+		TclJTAG *j=GetJTAG(cdata);
+		if(!j)
+			return TCL_ERROR;
+
+		if(objc>=2)
+			res=Tcl_GetIntFromObj(interp,objv[1],&chainpos);
+
+		if(res!=TCL_OK)
+			return(res);			
+
+		if(!j->connected)
+		{
+			fprintf(stderr,"No cable connected\n");
+			return TCL_ERROR;
+		}
+		num=j->jtag->getChain();	
+		if(chainpos<0 || chainpos>=num)
+		{
+			fprintf(stderr,"%d devices in chain - chainpos must be between %d and %d\n",num,0,num-1);
+			return TCL_ERROR;		
+		}	
+		if(j->jtag->selectDevice(chainpos)<0)
+		{
+			fprintf(stderr,"SelectDevice failed\n");
+			return TCL_ERROR;
+		}
+		return TCL_OK;
+    }
 
 	static int deviceid(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 	{
@@ -604,7 +664,7 @@ class TclJTAG
 		if(res!=TCL_OK)
 			return(res);
 
-		res = get_id (*j->jtag, j->devicedb, chainpos);
+		res = get_id (j->jtag, j->devicedb, chainpos);
 		Tcl_SetObjResult(interp,Tcl_NewIntObj(res));
 		return(TCL_OK);
 	}
@@ -623,7 +683,7 @@ class TclJTAG
 		if(res!=TCL_OK)
 			return(res);
 
-		res = get_id (*j->jtag, j->devicedb, chainpos);
+		res = get_id (j->jtag, j->devicedb, chainpos);
 		const char *result=j->devicedb.idToDescription(res);
 
 		Tcl_SetObjResult(interp,Tcl_NewStringObj(result,-1));
@@ -634,7 +694,7 @@ class TclJTAG
 	DeviceDB devicedb;
 	CableDB cabledb;
 	struct cable_t cable;
-	Jtag *jtag;
+	std::auto_ptr<Jtag> jtag;
 	std::auto_ptr<IOBase> io;
 	unsigned int jtag_freq;
 	char const *dev;

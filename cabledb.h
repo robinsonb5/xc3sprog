@@ -59,5 +59,16 @@ public:
   int getCable(const char *name, struct cable_t *cable);
   int dumpCables(FILE *fp_out);
   const char *getCableName(const CABLES_TYPES type );
+  const char *getCableAlias(int idx)
+  {
+    if(idx<cable_db.size())
+      return(cable_db[idx].alias);
+    else
+      return(0);
+  }
+  int getCableCount()
+  {
+  	return(cable_db.size());
+  }
 };
 #endif //CABLEDB_H
