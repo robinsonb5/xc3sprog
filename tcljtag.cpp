@@ -481,7 +481,7 @@ class TclJTAG
 		j->connected=false;
 		return TCL_OK;
 	}
-	 
+
 	static int opencable(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 	{
 		int res;
@@ -489,16 +489,15 @@ class TclJTAG
 		if(!j)
 			return TCL_ERROR;
 
-		j->jtag.reset();
-		j->io.reset();
+		if(j->connected)
+		{
+			j->jtag.reset();
+			j->io.reset();
+		}
 		j->connected=false;
 
 		switch(objc)
 		{
-			case 1:
-				printf("FIXME - fetch list of cables...\n");
-				return TCL_ERROR;
-				break;
 			case 2:
 				res=j->cabledb.getCable(Tcl_GetString(objv[1]), &j->cable);
 				if(res)
@@ -507,26 +506,27 @@ class TclJTAG
 					fprintf(stderr,"Failed to open cable %s\n");
 					return(TCL_ERROR);
 				}
-//				printf("Getting IO...\n");  
+				fprintf(stderr,"Getting IO...\n");
 				res = getIO( &j->io, &j->cable, j->dev, j->serial, j->verbose, j->use_ftd2xx, j->jtag_freq);
 				if (res) /* some error happend*/
 				{
-					fprintf(stderr,"Failed to open cable %s\n");
+					fprintf(stderr,"Failed to open cable\n");
 					return(TCL_ERROR);
 				}
-//				printf("Got IO, creating JTAG object...\n");  
+				printf("Got IO, creating JTAG object...\n");  
 
 				j->jtag.reset(new Jtag(j->io.get()));
 				j->jtag->setVerbose(j->verbose);
 
 				detect_chain(j->jtag.get(), &j->devicedb);
-				if (!j->jtag->getChain())
+				int devcount=j->jtag->getChain();
+				if(!devcount)
 				{
 					fprintf(stderr,"Couldn't initialise chain\n");
 					return(TCL_ERROR);
 				}
 				j->connected=true;
-				Tcl_SetResult(interp,"1",TCL_STATIC);
+				Tcl_SetObjResult(interp,Tcl_NewIntObj(devcount));
 				return(TCL_OK);
 				break;
 		}
@@ -540,7 +540,12 @@ class TclJTAG
 		TclJTAG *j=GetJTAG(cdata);
 		if(!j)
 			return TCL_ERROR;
-			
+		if(!j->connected)
+		{
+			fprintf(stderr,"No cable connected\n");
+			return TCL_ERROR;
+		}
+
 		if(objc==2)
 		{
 			int irval;
@@ -562,7 +567,12 @@ class TclJTAG
 		TclJTAG *j=GetJTAG(cdata);
 		if(!j)
 			return TCL_ERROR;
-			
+		if(!j->connected)
+		{
+			fprintf(stderr,"No cable connected\n");
+			return TCL_ERROR;
+		}
+	
 		if(objc==3)
 		{
 			int drval;
@@ -608,11 +618,13 @@ class TclJTAG
 			return TCL_ERROR;
 		}
 		detect_chain(j->jtag.get(), &j->devicedb);
+		int devcount;
 		if (j->jtag->getChain(1))
 		{
 			fprintf(stderr,"Couldn't initialise chain\n");
 			return(TCL_ERROR);
 		}
+		Tcl_SetObjResult(interp,Tcl_NewIntObj(devcount));
 		return(TCL_OK);
 	}
 
@@ -624,6 +636,11 @@ class TclJTAG
 		TclJTAG *j=GetJTAG(cdata);
 		if(!j)
 			return TCL_ERROR;
+		if(!j->connected)
+		{
+			fprintf(stderr,"No cable connected\n");
+			return TCL_ERROR;
+		}
 
 		if(objc>=2)
 			res=Tcl_GetIntFromObj(interp,objv[1],&chainpos);
@@ -657,6 +674,11 @@ class TclJTAG
 		TclJTAG *j=GetJTAG(cdata);
 		if(!j)
 			return TCL_ERROR;
+		if(!j->connected)
+		{
+			fprintf(stderr,"No cable connected\n");
+			return TCL_ERROR;
+		}
 
 		if(objc>=2)
 			res=Tcl_GetIntFromObj(interp,objv[1],&chainpos);
@@ -676,6 +698,11 @@ class TclJTAG
 		TclJTAG *j=GetJTAG(cdata);
 		if(!j)
 			return TCL_ERROR;
+		if(!j->connected)
+		{
+			fprintf(stderr,"No cable connected\n");
+			return TCL_ERROR;
+		}
 
 		if(objc>=2)
 			res=Tcl_GetIntFromObj(interp,objv[1],&chainpos);

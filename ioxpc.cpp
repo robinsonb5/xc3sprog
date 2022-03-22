@@ -37,7 +37,7 @@
 #include "io_exception.h"
 
 IOXPC::IOXPC()
-    :  IOBase(), bptr(0), calls_rd(0) , calls_wr(0), call_ctrl(0), subtype(0)
+    :  IOBase(), bptr(0), calls_rd(0) , calls_wr(0), call_ctrl(0), subtype(0), connected(false)
 {
 }
 int IOXPC::Init(struct cable_t *cable, char const *serial, unsigned int freq)
@@ -168,13 +168,18 @@ int IOXPC::Init(struct cable_t *cable, char const *serial, unsigned int freq)
           return 3;
 	}
     }
+  connected=true;
+
   return 0;
 }
 
 IOXPC::~IOXPC()
 {
-  xpcu_output_enable(xpcu, 0);
-  xpc_close_interface (xpcu);
+  if(connected)
+  {
+    xpcu_output_enable(xpcu, 0);
+    xpc_close_interface (xpcu);
+  }
   if(fp_dbg)
     fclose(fp_dbg);
 }

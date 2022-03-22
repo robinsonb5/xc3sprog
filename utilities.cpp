@@ -24,12 +24,14 @@ void detect_chain(Jtag *jtag, DeviceDB *db)
   for(int i=0; i<num; i++)
     {
       DeviceID id = jtag->getDeviceID(i);
-      fprintf(stderr,"JTAG loc.: %3d  IDCODE: 0x%08lx  ", i, (unsigned long)id);
+      if(jtag->getVerbose())
+	      fprintf(stderr,"JTAG loc.: %3d  IDCODE: 0x%08lx  ", i, (unsigned long)id);
       int length = db->idToIRLength(id);
       if (length > 0)
         {
           jtag->setDeviceIRLength(i,length);
-          fprintf(stderr,"Desc: %30s Rev: %c  IR length: %2d\n",
+          if(jtag->getVerbose())
+            fprintf(stderr,"Desc: %30s Rev: %c  IR length: %2d\n",
                   db->idToDescription(id),
                   (int)(id >> 28) | 'A', length);
         }

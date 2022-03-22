@@ -71,6 +71,7 @@ class IOXPC : public IOBase
   int subtype;
   unsigned long long hid;
   FILE *fp_dbg;
+  bool connected;
   
  public:
   IOXPC();
