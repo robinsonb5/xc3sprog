@@ -1,23 +1,10 @@
-
-# Installation
-```
-# Add repo and key
-curl https://apt.matrix.one/doc/apt-key.gpg | sudo apt-key add -
-echo "deb https://apt.matrix.one/raspbian $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/matrixlabs.list
-
-# Update packages and install
-sudo apt-get update
-sudo apt-get upgrade
-
-#Installation
-sudo apt install matrixio-xc3sprog
-
-```
-
 # Spartan3, XCF and CPLD JTAG programmer and other utilities
 
 Copyright (C) 2004 Andrew Rogers
           (C) 2005-2011 Uwe Bonnes bon@elektron.ikp.physik.tu-darmstadt.de
+
+# TclJTAG library, built upon xc3sprog
+Copyright (C) 2022 Alastair M. Robinson
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -35,6 +22,50 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 Please also read the file "COPYING" which is a copy of the GNU General
 Public License
+
+## TclJTAG - Why?
+I have a Xilinx Platform Cable which appears to be poorly supported in other open-source JTAG utilities
+but is supported nicely by xc3sprog.
+I have some scripts which talk to designs on Altera/Intel chips, making use of the Virtual JTAG interface
+and Tcl/Tk, and wanted to make use of them on Xilinx chips as well, communicating over the Xilinx Platform Cable.
+I discovered that it's ridiculously easy to write a Tcl extension, so the libtcljtag library was born.
+
+At the time of writing the following commands are defined (all within the jtag:: namespace):
+* `get_cables` - returns a Tcl list of cables supported by xc3sprog.
+* `open_cable cablename` - opens the specified cable (for example: "jtag::open_cable xpc" will open the Xilinx Platform Cable).  Returns the number of devices found on the JTAG chain if successful.
+* `close_cable` - closes and releases the currently-open cable, if any.
+* `select_device` - addresses shift_ir and shift_dr commands to the specified device in the chain.
+* `get_device_id device` - return a 32-bit integer device ID of the specified device in the chain.
+* `get_device_description device` - looks up the device ID of the specified device in the devlist.txt file and returns the name of the device, if found.
+* `detect_chain` - re-scans the JTAG chain
+* `shift_ir value` - shifts the specified value in the Instruction Register of the currently selected device in the chain, passing through the `Update_IR` JTAG state when done.
+* `shift_dr value length` - Passes through the `Capture_DR` JTAG state, then shifts the specified value and number of bits into the Data Register of the currently selected device in the chain, passing through the `Update_DR` state when done.  Returns the captured value.
+
+## Example TclJTAG session
+Using the TclJTAG extension to talk to a design on an FPGA might look something like this:
+```
+# Load the extension
+load "/path/to/libtcljtag.so"
+
+# Open the cable
+jtag::open_cable xpc
+
+# Fetch a description of the first device in the chain...
+set desc [jtag::get_device_description 0]
+
+# Is it a Xilinx Series 7 FPGA?
+if { [string match "XC7*" $desc] } {
+	# Select the USER3 register
+	jtag::shift_ir 0x22
+	# Shift a 32-bit value into the USER3 register, and fetch its captured contents.
+	set d [jtag::shift_dr 0x12345678 32]
+}
+# Print the fetched value
+puts [format 0x%x d]
+
+# And finally close the cable
+jtag::close_cable
+```
 
 ## Prerequisites
 This program should run without installation. For accessing USB cables, `libusb0`
