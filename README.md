@@ -55,13 +55,16 @@ set desc [jtag::get_device_description 0]
 
 # Is it a Xilinx Series 7 FPGA?
 if { [string match "XC7*" $desc] } {
+
 	# Select the USER3 register
 	jtag::shift_ir 0x22
+
 	# Shift a 32-bit value into the USER3 register, and fetch its captured contents.
 	set d [jtag::shift_dr 0x12345678 32]
+
+	# Print the fetched value
+	puts [format 0x%x d]
 }
-# Print the fetched value
-puts [format 0x%x d]
 
 # And finally close the cable
 jtag::close_cable
